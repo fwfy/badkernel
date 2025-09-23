@@ -2,7 +2,7 @@
 What if bad apple was a self-contained bootable bzImage? Disclaimer: I have no clue what I'm doing
 
 # How to use
-1. Clone a kernel into a subfolder called "linux"
+1. Clone this repository with ``--recurse-submodules`` in order to grab a copy of the Linux kernel
 2. Run "make -j$(nproc)"
 3. Profit!
 
