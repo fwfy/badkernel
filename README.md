@@ -3,7 +3,7 @@ What if bad apple was a self-contained bootable bzImage? Disclaimer: I have no c
 
 # How to use
 1. Clone a kernel into a subfolder called "linux"
-2. Run "build_and_run.sh"
+2. Run "make -j$(nproc)"
 3. Profit!
 
 # How to build an ISO
