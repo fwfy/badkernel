@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <sys/mount.h>
 #include <unistd.h>
