@@ -24,8 +24,8 @@
 const std::chrono::milliseconds FRAME_DURATION(1000 / FPS_ASCII);
 const std::string screen_clear = "\x1B[H\x1B[J";
 
-void hcf() { // I dont fucking care anymore
-    std::cout << "Halting and Catching Fire" << std::endl;
+void hcf(std::string reason) { // I dont fucking care anymore
+    std::cout << "Halting and Catching Fire (reason: " << reason << ")" << std::endl;
     while(1) {}
 }
 
@@ -84,7 +84,7 @@ int play_video() {
     std::ifstream apple("badapple.txt");
     if(!apple.is_open()) {
         std::cout << "apple: FATAL! Couldn't open the input file for reading. :(" << std::endl;
-        _exit(1);
+        return 1;
     }
     std::string line;
     std::cout << screen_clear;
@@ -112,15 +112,14 @@ int play_video() {
         }
     }
     std::cout << "All done!" << std::endl;
-    hcf();
+    return 0;
 }
 
-void play_audio() {
+int play_audio() {
     int dsp_fd = open("/dev/dsp", O_WRONLY);
     if(dsp_fd < 0) {
-        std::cout << "WARNING: Error while opening /dev/dsp! Errno: " << errno << std::endl;
-        std::cout << "You will not be able to hear anything!" << std::endl;
-        hcf();
+        perror("WARNING: Error while opening /dev/dsp! You won't be able to hear anything");
+        return 1;
     }
     int format = AFMT_U8;
     int channels = 1;
@@ -141,14 +140,34 @@ void play_audio() {
     while(read(audio_fd, &audio_buffer, CHUNK_SIZE)) {
         write(dsp_fd, &audio_buffer, CHUNK_SIZE);
     }
-
-    hcf();
+    hcf("Audio thread is done");
+    return 0;
 }
 
 int main() {
-    std::cout << screen_clear << "BadKernel by fwfy" << std::endl << "The show will begin in 5 seconds. Adjust your volume!" << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    std::cout << screen_clear;
+    char stdin_buf;
+    bool egg = false;
+    int stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    if(stdin_flags == -1) {
+        perror("Failed to get stdin flags");
+        return 1;
+    }
+    if(fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK)) {
+        perror("Failed to make stdin non-blocking");
+        return 1;
+    }
+    for(int i = 1; i > 0; i--) {
+        std::cout << screen_clear << "BadKernel by fwfy\n\nThe show will begin in " << i << " seconds. Adjust your volume!" << std::endl;
+        if(egg) {
+            std::cout << ":3" << std::endl;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        if(read(STDIN_FILENO, &stdin_buf, 1) > 0) {
+            if(stdin_buf == 'v') {
+                egg = true;
+            }
+        }
+    }
     pid_t pid = fork();
    	std::cout << "\x1b[?1049h\x1b[?25l" << std::flush;; // no blinkencursor pls
     if(pid == 0) {
