@@ -9,6 +9,7 @@ test: linux/arch/x86/boot/bzImage
 	    -audiodev pa,id=snd0 \
 		-device intel-hda \
 		-device hda-output,audiodev=snd0 \
+		-serial mon:stdio \
 		-m 2G
 
 apple:
@@ -18,6 +19,7 @@ initramfs: apple
 	cp apple_src/{apple,init} initramfs/sbin
 	cp apple_src/badapple.txt initramfs
 	cp apple_src/badapple.pcm initramfs
+	cp apple_src/fb_video.gz initramfs
 linux/arch/x86/boot/bzImage: .config initramfs
 	cp $< linux/
 	$(MAKE) -C linux
