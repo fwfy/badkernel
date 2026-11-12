@@ -12,5 +12,5 @@ init: init.c
 	strip --strip-all $@
 
 apple: apple.cpp
-	$(CXX) $(CFLAGS) $< -o $@
+	$(CXX) $(CFLAGS) $< -lz -o $@
 	strip --strip-all $@

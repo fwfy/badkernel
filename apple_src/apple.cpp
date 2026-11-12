@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -6,12 +7,21 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/soundcard.h>
+#include <sys/reboot.h>
+#include <sys/mman.h>
+#include <linux/fb.h>
 #include <vector>
+#include <zlib.h>
 
 #define CHUNK_SIZE 24
-#define FPS 15
+#define FPS_ASCII 15
+#define FPS 30
+#define FRAME_DURATION_NS 1000000000LL / FPS
+#define FB_VID_WIDTH 480
+#define FB_VID_HEIGHT 240
+#define FB_VID_BUFSIZE FB_VID_WIDTH * FB_VID_HEIGHT
 
-const std::chrono::milliseconds FRAME_DURATION(1000 / FPS);
+const std::chrono::milliseconds FRAME_DURATION(1000 / FPS_ASCII);
 const std::string screen_clear = "\x1B[H\x1B[J";
 
 void hcf() { // I dont fucking care anymore
@@ -19,7 +29,58 @@ void hcf() { // I dont fucking care anymore
     while(1) {}
 }
 
-void play_video() {
+int play_video_fb() {
+	int fbfd = open("/dev/fb0", O_RDWR);
+	if(fbfd == -1) {
+		perror("Couldn't open /dev/fb0. Does your kernel have support?");
+		return 1;
+	}
+	struct fb_var_screeninfo vinfo;
+    struct fb_fix_screeninfo finfo;
+    if (ioctl(fbfd, FBIOGET_VSCREENINFO, &vinfo) == -1 ||
+        ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        perror("Error reading screen info");
+        close(fbfd);
+        return 1;
+    }
+    long screensize = finfo.smem_len;
+    uint32_t *fbp = (uint32_t *)mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
+    if ((long)fbp == -1) {
+        perror("Error mapping framebuffer device to memory");
+        close(fbfd);
+        return 1;
+    }
+    gzFile video = gzopen("fb_video.gz", "rb");
+    if(!video) {
+    	perror("Failed to open fb_video.gz");
+     	return 1;
+    }
+    std::vector<uint8_t> fbvid_buf(FB_VID_BUFSIZE);
+    struct timespec start_ts;
+    clock_gettime(CLOCK_MONOTONIC, &start_ts);
+    int64_t start_ns = (int64_t)start_ts.tv_sec * 1000000000LL + start_ts.tv_nsec;
+    int64_t frame_count = 0;
+    while(gzread(video, fbvid_buf.data(), fbvid_buf.size())) {
+    	for(uint32_t Y = 0; Y < vinfo.yres; Y++) {
+            uint32_t *row_dest = (uint32_t *)((char*)fbp + Y * finfo.line_length);
+            int y = Y * FB_VID_HEIGHT / vinfo.yres;
+            for(uint32_t X = 0; X < vinfo.xres; X++) {
+                int x = X * FB_VID_WIDTH / vinfo.xres;
+                uint8_t gray = fbvid_buf[y * FB_VID_WIDTH + x];
+                row_dest[X] = (gray << 16) | (gray << 8) | gray;
+            }
+        }
+        frame_count++;
+        int64_t target_ns = start_ns + (frame_count * FRAME_DURATION_NS);
+        struct timespec target_ts;
+        target_ts.tv_sec = target_ns / 1000000000LL;
+        target_ts.tv_nsec = target_ns % 1000000000LL;
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &target_ts, NULL);
+    }
+    return 0;
+}
+
+int play_video() {
     std::ifstream apple("badapple.txt");
     if(!apple.is_open()) {
         std::cout << "apple: FATAL! Couldn't open the input file for reading. :(" << std::endl;
@@ -89,11 +150,20 @@ int main() {
     std::this_thread::sleep_for(std::chrono::seconds(5));
     std::cout << screen_clear;
     pid_t pid = fork();
+   	std::cout << "\x1b[?1049h\x1b[?25l" << std::flush;; // no blinkencursor pls
     if(pid == 0) {
-        play_video();
-        _exit(0);
+    	if(play_video_fb()) {
+     		std::cout << "play_video_fb() exited with a non-zero return! Falling back to ASCII mode." << std::endl;
+	        if(play_video()) {
+	            std::cout << "play_video() exited with a non-zero return! :(" << std::endl;
+	        }        
+     	}
+    } else {
+        if(play_audio()) {
+            std::cout << "play_audio() exited with a non-zero return! :(" << std::endl;
+        }
     }
-    play_audio();
+    if(reboot(RB_POWER_OFF) != 0) {
+        perror("Failed to power off the system");
+    }
 }
-
-
